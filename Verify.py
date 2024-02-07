@@ -27,7 +27,7 @@ def loquat_verify_step_1(Fp, Fp2, loquat_hash, loquat_expand, algebraic_hash, si
             h_i = h_i_plus_1
             break
         h_i = h_i_plus_1
-    queries = get_ldt_query(algebraic_hash, loquat_expand, h_i[0], kappa, Fp2)
+    queries = get_ldt_query(algebraic_hash, loquat_expand, [h_i[0]], kappa, Fp2)
 
     return phase_1_challenge, phase_2_challenge, vec_e, queries, h_3, h_i_list
 

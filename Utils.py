@@ -7,8 +7,8 @@ from hashlib import sha3_256
 from hashlib import shake_256
 
 
-def eval_poly_over_listU(poly, ldt_list):
-    return [[poly(item) for item in val] for val in ldt_list]
+def eval_poly_over_listU(poly, listU):
+    return [[poly(item) for item in val] for val in listU]
 
 
 def sha3_256_func(Fp2, inputs):
@@ -102,8 +102,59 @@ def MT_commit(algebraic_hash, loquat_hash, leaf, tree_cap, salt, Fp2):
         ]
         leaf = new_layer
         tree.append(leaf)
-    root = loquat_hash_func(algebraic_hash, loquat_hash, [h[0] for h in leaf], salt, Fp2)
+    # print(leaf)
+    root = loquat_hash_func(algebraic_hash, loquat_hash, flatten(leaf), salt, Fp2)
     return root, tree
+
+def MT_open(index, merkle_tree):
+    path = []
+    if index % 2 == 0:
+        path.append(merkle_tree[0][index + 1])
+    else:
+        path.append(merkle_tree[0][index - 1])
+
+    for i in range(1, len(merkle_tree) - 1):
+        index = floor(index / 2)
+        if index % 2 == 0:
+            path.append(merkle_tree[i][index + 1])
+        else:
+            path.append(merkle_tree[i][index - 1])
+    return path
+
+def MT_recompute_intermediate(algebraic_hash, loquat_hash, index, authentication_path, leaf, salt, Fp2):
+    current_hash = leaf
+    for sibling_hash in authentication_path:
+        if index % 2 == 0:
+            input_seq = current_hash + sibling_hash
+            current_hash = loquat_hash_func(algebraic_hash, loquat_hash, input_seq, salt, Fp2)
+        else:
+            input_seq = sibling_hash + current_hash
+            current_hash = loquat_hash_func(algebraic_hash, loquat_hash, input_seq, salt, Fp2)
+        index = floor(index / 2)
+    return current_hash
+
+
+def MT_recompute_root(algebraic_hash, loquat_hash, queries, authentication_path, leaf, tree_cap,
+                      additional_nodes, ldt_lists, i, salt, Fp2):
+    roots = {}
+    for ind in range(len(queries)):
+        index = floor(queries[ind] / 2 ** (log(len(ldt_lists[i]), 2) - tree_cap))
+
+        value = MT_recompute_intermediate(algebraic_hash, loquat_hash, queries[ind], authentication_path[ind], leaf[ind], salt, Fp2)
+        if index not in roots.keys():
+            roots.update({index: value})
+    if len(roots) < 2 ** tree_cap and len(additional_nodes.keys()) > 0:
+        # print(additional_nodes)
+        for key in additional_nodes.keys():
+            if key not in roots.keys():
+                roots.update({key: additional_nodes[key]})
+    sorted_roots = {k: roots[k] for k in sorted(roots.keys())}
+    if len(sorted_roots.keys()) != 2 ** tree_cap:
+        return 0
+    else:
+        input_seq = flatten(sorted_roots.values())
+        root = loquat_hash_func(algebraic_hash, loquat_hash, input_seq, salt, Fp2)
+        return root
 
 
 def convert_bytes_to_Fp2(Fp2, data):
@@ -164,17 +215,4 @@ def get_ldt_query(algebraich_hash, loquat_expand, h_i, kappa, Fp2):
     return result
 
 
-def MT_open(index, merkle_tree):
-    path = []
-    if index % 2 == 0:
-        path.append(merkle_tree[0][index + 1])
-    else:
-        path.append(merkle_tree[0][index - 1])
 
-    for i in range(1, len(merkle_tree) - 1):
-        index = floor(index / 2)
-        if index % 2 == 0:
-            path.append(merkle_tree[i][index + 1])
-        else:
-            path.append(merkle_tree[i][index - 1])
-    return path

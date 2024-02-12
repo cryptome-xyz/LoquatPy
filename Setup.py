@@ -13,14 +13,15 @@ B = 128
 S = 128
 ETA = 2
 R = 4
+m = 32
 RHO_STAR = 1 / 16
 # polynomial degree parameter m decide SIZE_U
-SIZE_U_OPTIONS = {32: (2 ** 12), 64: (2 ** 13)}
+SIZE_U_OPTIONS = {0: (2 ** 12), 1: (2 ** 13)}
 # (LOQUAT_STAR, LDT_SEC) decide LDT query complexity kappa
 KAPPA_OPTIONS = {(1, 100): 50, (1, 128): 64, (0, 100): 25, (0, 128): 32}
 
 
-def validate_params(loquat_star, algebraic_hash, ldt_sec_choice, m):
+def validate_params(loquat_star, algebraic_hash, ldt_sec_choice):
     if loquat_star not in [0, 1]:
         print(f"Invalid choice of loquat_star, require 0 or 1, given {loquat_star}")
         sys.exit()
@@ -30,10 +31,12 @@ def validate_params(loquat_star, algebraic_hash, ldt_sec_choice, m):
     if (loquat_star, ldt_sec_choice) not in KAPPA_OPTIONS.keys():
         print(f"Invalid choice of ldt secure parameters, require 100 or 128, given {ldt_sec_choice}")
         sys.exit()
-    if m not in SIZE_U_OPTIONS.keys():
+    '''if m not in SIZE_U_OPTIONS.keys():
         print(f"Invalid choice of m, require 32 or 64, given {m}")
-        sys.exit()
-
+        sys.exit()'''
+    # if loquat_star == 1 and m != 64:
+        # print(f"Invalid choice of m for Loquat-star, must be m = 64, given {m}")
+         # sys.exit()
 
 def setup_griffin_parameters(t, c):
     (p, t, capacity, security_level, d, dinv, N, mat, alphas, betas,
@@ -74,12 +77,12 @@ def generate_ldt_lists(Fp2, size_H, size_U):
     return g, listH, sorted_ldt_lists
 
 
-def loquat_setup(loquat_star=0, algebraic_hash=0, ldt_sec_choice=100, m=32):
+def loquat_setup(loquat_star=0, algebraic_hash=0, ldt_sec_choice=100):
     st = time.time()
-    validate_params(loquat_star, algebraic_hash, ldt_sec_choice, m)
+    validate_params(loquat_star, algebraic_hash, ldt_sec_choice)
 
     kappa = KAPPA_OPTIONS[(loquat_star, ldt_sec_choice)]
-    size_U = SIZE_U_OPTIONS[m]
+    size_U = SIZE_U_OPTIONS[loquat_star]
     Fp = GF(P)
     Fp2 = GF(P ** 2, 'a')
     listI = [Fp.random_element() for _ in range(L)]
@@ -87,7 +90,7 @@ def loquat_setup(loquat_star=0, algebraic_hash=0, ldt_sec_choice=100, m=32):
     size_H = 2 * m
     # set parameters for univariate sumcheck and ldt
     g, listH, ldt_lists = generate_ldt_lists(Fp2, size_H, size_U)
-    tree_cap = floor(log(kappa, 2) - 1)
+    tree_cap = 3 #floor(log(kappa, 2) - 1)
 
     if algebraic_hash:
         # Griffin capacity

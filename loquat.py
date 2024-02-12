@@ -8,13 +8,11 @@ def main():
     # loquat_star = 0/1; 1 for stronger security
     # algebraic_hash = 0/1; 1 use griffin, 0 use SHA
     # ldt_choice: 100/128 100 for 100-bit security ldt
-    # m: 32/64: 32 results in smaller signature and faster
-    pp = loquat_setup(0, 0, 100, 32)
+    pp = loquat_setup(1, 1, 100)
     sk, pk = loquat_keygen(pp)
     msg = "Hello World"
-    test_num = 10
+    test_num = 1
     for _ in range(test_num):
-
         sig = loquat_sign(pp, sk, msg)
         result = loquat_verify(pp, pk, msg, sig)
         if result == 1:

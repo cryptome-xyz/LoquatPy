@@ -1,8 +1,6 @@
 import time
 
 from sage.all import *
-import numpy as np
-import array as arr
 from Utils import *
 
 
@@ -129,7 +127,7 @@ def loquat_sign_phase_5(Fp2, algebraic_hash, loquat_hash, loquat_expand, sigma_4
                         vec_epsilon, x, poly_Z_H, poly_f_prime, poly_h, value_S, poly_def, ldt_lists, eval_c_prime, eta,
                         eval_s, eval_h, poly_c_prime, poly_s, rho_star, listH):
     st = time.time()
-    h_4, vec_e = get_phase_4_challenges(algebraic_hash, loquat_hash, loquat_expand, sigma_4 + [h_3], salt, Fp2)
+    h_4, vec_e = get_phase_4_challenges(algebraic_hash, loquat_hash, loquat_expand, sigma_4 + [h_3], salt, Fp2, m)
     vec_lambda_o = vec_lambda.pairwise_product(sigma_2)
     mu = sum(vec_epsilon[j] * sum(vec_lambda_o[ind + j * m] for ind in range(m)) for j in range(n))
     # rational constraint poly_p
@@ -186,6 +184,7 @@ def loquat_sign_phase_6(vec_f_0, h_4, loquat_hash, algebraic_hash, Fp2, salt, tr
     for ind in range(r + 1):
         leaf_f_i = get_leaf_hash(False, vec_f_i, algebraic_hash, loquat_hash, salt, Fp2)
         # MT commit to vec_f_i
+        # print(ind, ":", len(leaf_f_i))
         root_f_i, tree_f_i = MT_commit(algebraic_hash, loquat_hash, leaf_f_i, tree_cap, salt, Fp2)
         sigma_i = root_f_i
         h_i_plus_1 = loquat_hash_func(algebraic_hash, loquat_hash, sigma_i, salt, Fp2)
@@ -193,14 +192,12 @@ def loquat_sign_phase_6(vec_f_0, h_4, loquat_hash, algebraic_hash, Fp2, salt, tr
         vec_f_i_plus_1 = []
         tree_f.append(tree_f_i)
         root_f.append(root_f_i)
-
         if ind == r:
             y_values = []
             for s in range(len(vec_f_i)):
                 for my_eta in range(ldt_eta):
                     y_values.append(vec_f_i[s][my_eta])
             poly_f_r = poly_def.lagrange_polynomial(zip(ldt_lists[r], y_values))
-            # print(poly_f_r)
             degree_f_r = int(rho_star * len(ldt_lists[r]) - 1)
             coe_f_r = poly_f_r.coefficients()[:degree_f_r + 1]
             # need to hash them with previous challenge h_i_plus_1
@@ -218,13 +215,13 @@ def loquat_sign_phase_6(vec_f_0, h_4, loquat_hash, algebraic_hash, Fp2, salt, tr
                     poly_P_y = poly_def.lagrange_polynomial(zip(list_U_i[y + ind_prime], vec_f_i[y + ind_prime]))
                     temp.append(poly_P_y(h_i_plus_1))
                 vec_f_i_plus_1.append(temp)
-
         vec_ldt.append([item for item in vec_f_i_plus_1])
         h_i = h_i_plus_1
         vec_f_i.clear()
         vec_f_i = vec_f_i_plus_1
     print("Signing phase 6 running time: {} seconds".format(time.time() - st))
     print("-" * 50)
+
     return tree_f, root_f, coe_f_r, vec_ldt, h_i
 
 
@@ -254,13 +251,6 @@ def loquat_sign_phase_7(algebraic_hash, loquat_expand, h_i, kappa, Fp2, n, eval_
     powers_of_4 = [4 ** i for i in range(r + 1)]
 
     # get authentication paths for LDT trees
-    '''for i in range(r + 1):
-        indices = set(floor(queries[ind] / powers_of_4[i]) for ind in range(len(queries)))
-        auth_r.append([MT_open(index, tree_f[i]) for index in indices])
-        if i > 0:
-            query_r.append({index: vec_ldt[i - 1][index] for index in indices})'''
-
-    # get authentication paths for LDT trees
     for i in range(0, r + 1):
         temp = []
         temp_ind = []
@@ -285,12 +275,17 @@ def loquat_sign_phase_7(algebraic_hash, loquat_expand, h_i, kappa, Fp2, n, eval_
             floor(floor(item / powers_of_4[i]) / 2 ** (log(len(ldt_lists[i]), 2) - tree_cap)) for item in queries)
         unused_indices = final_indices - used_indices
         if unused_indices:
+            # if i != r - 1:
             additional_node_ldt[i] = {index: tree_f[i][-1][index] for index in unused_indices}
-
+            # else:
+                # additional_node_ldt[i] = {index: tree_f[i][0][index] for index in unused_indices}
+    additional_y_values = {}
+    for ind in additional_node_ldt[3].keys():
+        additional_y_values.update({ind: vec_ldt[-1][ind]})
     print("Signing phase 7 running time: {} seconds".format(time.time() - st))
     print("-" * 50)
 
-    return query_leaf_c, query_leaf_s, query_leaf_h, auth_c, auth_s, auth_h, additional_node_us, auth_r, query_r, additional_node_ldt, queries
+    return query_leaf_c, query_leaf_s, query_leaf_h, auth_c, auth_s, auth_h, additional_node_us, auth_r, query_r, additional_node_ldt, queries, additional_y_values
 
 
 def cal_sig_size(sig):
@@ -358,6 +353,8 @@ def cal_sig_size(sig):
                     total_bits += item1.to_integer().bit_length()
     total_bits += salt.to_integer().bit_length()
     print("Signature size is (bits)", total_bits)
+    print("Signature size is (bytes)", total_bits / 8)
+    print("Signature size is (KB)", total_bits / 1024 / 8)
     print('-' * 50)
 
 
@@ -409,7 +406,7 @@ def loquat_sign(pp, sk, msg):
                                                                 tree_cap, ldt_lists, eta, poly_def,
                                                                 rho_star, r)
 
-    query_leaf_c, query_leaf_s, query_leaf_h, auth_c, auth_s, auth_h, additional_node_us, auth_r, query_r, additional_node_ldt,queries = loquat_sign_phase_7(
+    query_leaf_c, query_leaf_s, query_leaf_h, auth_c, auth_s, auth_h, additional_node_us, auth_r, query_r, additional_node_ldt,queries, additional_y_values = loquat_sign_phase_7(
         algebraic_hash, loquat_expand, h_i, kappa, Fp2, n, eval_c_prime, eval_s, eval_h, tree_c,
         tree_s, tree_h, ldt_lists, tree_cap, tree_f, r, vec_ldt)
 
@@ -433,6 +430,7 @@ def loquat_sign(pp, sk, msg):
         "auth_r": auth_r,
         "query_r": query_r,
         "additional_node_ldt": additional_node_ldt,
+        "additional_y_values": additional_y_values,
         "salt": salt
     }
 

@@ -111,7 +111,8 @@ def get_matrix(p, t):
 def griffin_parameters(p, t, capacity, security_level):
     d, dinv = get_powers(p)
     N = get_number_of_rounds(p, t, security_level, d)
-    # print("number of rounds:", N)
+    print("number of rounds:", N)
+    print("degree: ", d)
     mat = get_matrix(p, t)
     alphas, betas, round_constants = get_round_constants(
         p, t, capacity, security_level, N)

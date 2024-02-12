@@ -123,6 +123,7 @@ def MT_open(index, merkle_tree):
 
 def MT_recompute_intermediate(algebraic_hash, loquat_hash, index, authentication_path, leaf, salt, Fp2):
     current_hash = leaf
+
     for sibling_hash in authentication_path:
         if index % 2 == 0:
             input_seq = current_hash + sibling_hash
@@ -137,9 +138,9 @@ def MT_recompute_intermediate(algebraic_hash, loquat_hash, index, authentication
 def MT_recompute_root(algebraic_hash, loquat_hash, queries, authentication_path, leaf, tree_cap,
                       additional_nodes, ldt_lists, i, salt, Fp2):
     roots = {}
+
     for ind in range(len(queries)):
         index = floor(queries[ind] / 2 ** (log(len(ldt_lists[i]), 2) - tree_cap))
-
         value = MT_recompute_intermediate(algebraic_hash, loquat_hash, queries[ind], authentication_path[ind], leaf[ind], salt, Fp2)
         if index not in roots.keys():
             roots.update({index: value})
@@ -149,6 +150,7 @@ def MT_recompute_root(algebraic_hash, loquat_hash, queries, authentication_path,
             if key not in roots.keys():
                 roots.update({key: additional_nodes[key]})
     sorted_roots = {k: roots[k] for k in sorted(roots.keys())}
+
     if len(sorted_roots.keys()) != 2 ** tree_cap:
         return 0
     else:
@@ -198,9 +200,12 @@ def get_phase_2_challenge(Fp, Fp2, B, n, algebraic_hash, loquat_hash, loquat_exp
     return h_2, result
 
 
-def get_phase_4_challenges(algebraic_hash, loquat_hash, loquat_expand, inputs, salt, Fp2):
+def get_phase_4_challenges(algebraic_hash, loquat_hash, loquat_expand, inputs, salt, Fp2, m):
     h_4 = loquat_hash_func(algebraic_hash, loquat_hash, inputs, salt, Fp2)
-    result = loquat_expand_func(False, algebraic_hash, loquat_expand, h_4, 14, Fp2)
+    if m == 32:
+        result = loquat_expand_func(False, algebraic_hash, loquat_expand, h_4, 14, Fp2)
+    else:
+        result = loquat_expand_func(False, algebraic_hash, loquat_expand, h_4, 10, Fp2)
     return h_4, result
 
 

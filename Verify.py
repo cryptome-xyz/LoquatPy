@@ -8,16 +8,15 @@ def loquat_verify_step_1(Fp, Fp2, loquat_hash, loquat_expand, algebraic_hash, si
                                                    B)
     h_2, phase_2_challenge = get_phase_2_challenge(Fp, Fp2, B, n, algebraic_hash, loquat_hash, loquat_expand, sigma_2,
                                                    h_1, salt)
-
+    m = B // n
     h_3 = loquat_hash_func(algebraic_hash, loquat_hash, sigma_3 + [h_2], salt, Fp2)
-    h_4, vec_e = get_phase_4_challenges(algebraic_hash, loquat_hash, loquat_expand, sigma_4 + [h_3], salt, Fp2)
+    h_4, vec_e = get_phase_4_challenges(algebraic_hash, loquat_hash, loquat_expand, sigma_4 + [h_3], salt, Fp2, m)
     h_i = h_4
     h_i_list = []
     for ind in range(r + 1):
         sigma_i = [root_f[ind]]
         h_i_plus_1 = loquat_hash_func(algebraic_hash, loquat_hash, sigma_i, salt, Fp2)
         h_i_list.append(h_i_plus_1)
-        # print("h_i", h_i)
         if ind == r:
             sigma_i = []
             for item in coe_f_r:
@@ -28,7 +27,6 @@ def loquat_verify_step_1(Fp, Fp2, loquat_hash, loquat_expand, algebraic_hash, si
             break
         h_i = h_i_plus_1
     queries = get_ldt_query(algebraic_hash, loquat_expand, [h_i[0]], kappa, Fp2)
-
     return phase_1_challenge, phase_2_challenge, vec_e, queries, h_3, h_i_list
 
 
@@ -108,12 +106,6 @@ def loquat_verify_step_2(Fp2, phase_2_challenge, phase_1_challenge, listI, m, n,
                    range(len(row))]
         matrix_pi = matrix_pi.stack(Matrix(new_row))
 
-    '''for ind in range(num_rows):
-        temp = []
-        for ind_prime in range(len(matrix_pi.row(ind))):
-            temp.append(flattened_query[ind_prime] ** exp_list[ind] * matrix_pi.row(ind)[ind_prime])
-        matrix_pi = matrix_pi.stack(Matrix(temp))'''
-
     matrix_e = Matrix(vec_e)
     temp = (matrix_e * matrix_pi).row(0)
     # print(temp)
@@ -129,7 +121,7 @@ def loquat_verify_step_2(Fp2, phase_2_challenge, phase_1_challenge, listI, m, n,
 def loquat_verify_step_3(phase_1_challenge, sigma_2, sigma_1, p, pk, sigma_3, sigma_4, ldt_lists,
                          query_leaf_h, query_leaf_s, tree_cap, auth_h, auth_s, auth_c, queries, additional_node_us, eta,
                          query_leaf_c, algebraic_hash, rho_star, poly_def, coe_f_r, loquat_hash, salt, Fp2, r, auth_r,
-                         vec_f_0, additional_node_ldt, root_f, query_r, h_i_list):
+                         vec_f_0, additional_node_ldt, root_f, query_r, h_i_list, additional_y_values):
     # check the response of Legendre symbols
     for ind in range(len(phase_1_challenge)):
         if floor(1 / 2 * (1 - kronecker(sigma_2[ind], p))) != ((pk[phase_1_challenge[ind]] + sigma_1[1][ind]) % 2):
@@ -182,24 +174,21 @@ def loquat_verify_step_3(phase_1_challenge, sigma_2, sigma_1, p, pk, sigma_3, si
                 print("MT sub-vector error")
                 return 0
         else:
-            vec_f_i = list(query_r[r - 1].values())
-            index = []
+            additional_y_values.update(query_r[i - 1])
             degree_f_r = int(rho_star * len(ldt_lists[r]) - 1)
-            for ind in range(len(queries)):
-                if floor(queries[ind] / 4 ** i) not in index:
-                    index.append(floor(queries[ind] / 4 ** i))
-            for i in range(len(index)):
-                x_values = ldt_lists[r][index[i]]
-                y_values = vec_f_i[i]
-                poly_f_r = poly_def.lagrange_polynomial(zip(x_values, y_values))
-                if poly_f_r.degree() > degree_f_r:
-                    print("Reject: Invalid LDT answer with degree of polynomial f_r greater than", degree_f_r)
+            y_values = []
+            for i in range(len(ldt_lists[r]) // ldt_eta):
+                for item in list(additional_y_values[i]):
+                    y_values.append(item)
+            poly_f_r = poly_def.lagrange_polynomial(zip(ldt_lists[r], y_values))
+            if poly_f_r.degree() > degree_f_r:
+                print("Reject: Invalid LDT answer with degree of polynomial f_r greater than", degree_f_r)
+                return 0
+            coe_f_r_prime = poly_f_r.coefficients()[:degree_f_r + 1]
+            for i in range(len(coe_f_r_prime)):
+                if coe_f_r_prime[i] != coe_f_r[i]:
+                    print("Reject: Invalid LDT coefficieints at round r =", r)
                     return 0
-                coe_f_r_prime = poly_f_r.coefficients()[:degree_f_r + 1]
-                for i in range(len(coe_f_r_prime)):
-                    if coe_f_r_prime[i] != coe_f_r[i]:
-                        print("Reject: Invalid LDT coefficieints at round r =", r)
-                        return 0
             break
         # check ldt consistency
         for ind in range(len(index)):
@@ -232,11 +221,11 @@ def loquat_verify(pp, pk, msg, sig):
                                                                         "loquat_expand"))
     (sigma_1, sigma_2, sigma_3, sigma_4, root_f, auth_c, auth_s, auth_h, query_leaf_c, query_leaf_s,
      query_leaf_h, additional_node_us, coe_f_r, auth_r, query_r,
-     additional_node_ldt, salt) = (sig[i] for i in
+     additional_node_ldt, additional_y_values, salt) = (sig[i] for i in
                                    ("sigma_1", "sigma_2", "sigma_3", "sigma_4", "root_f", "auth_c", "auth_s",
                                     "auth_h", "query_leaf_c", "query_leaf_s", "query_leaf_h",
                                     "additional_node_us", "coe_f_r", "auth_r", "query_r",
-                                    "additional_node_ldt", "salt"))
+                                    "additional_node_ldt", "additional_y_values", "salt"))
     B = n * m
     size_H = len(listH)
     poly_def = PolynomialRing(Fp2, 'x')
@@ -257,13 +246,12 @@ def loquat_verify(pp, pk, msg, sig):
                                    ldt_lists, queries, poly_Z_H, h_3, sigma_2, sigma_3, B, poly_def, query_leaf_s,
                                    query_leaf_h,
                                    rho_star, vec_e)
-
     result = loquat_verify_step_3(phase_1_challenge, sigma_2, sigma_1, p, pk, sigma_3, sigma_4, ldt_lists,
                                   query_leaf_h, query_leaf_s, tree_cap, auth_h, auth_s, auth_c, queries,
                                   additional_node_us, eta,
                                   query_leaf_c, algebraic_hash, rho_star, poly_def, coe_f_r, loquat_hash, salt, Fp2, r,
                                   auth_r,
-                                  vec_f_0, additional_node_ldt, root_f, query_r, h_i_list)
+                                  vec_f_0, additional_node_ldt, root_f, query_r, h_i_list, additional_y_values)
 
     print("Verify running time: {} seconds".format(time.time() - st))
     print("-" * 50)
